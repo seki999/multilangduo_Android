@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-v-app>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>文本转语音应用</title>
+<style>
+*{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;}
+body{margin:0;background:#f0f2f5;color:#222;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:12px;}
+.app-container{background:#fff;width:95%;max-width:1800px;min-width:600px;margin:0 auto;padding:1.8rem 2rem;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.12);display:flex;flex-direction:column;gap:1.4rem;}
+h1{margin:0 0 .5rem;font-size:1.7rem;}
+.control-group{display:flex;flex-direction:column;gap:.5rem;}
+.voice-select-row{display:flex;gap:.6rem;flex-wrap:wrap;}
+.select-box,.short-select{padding:.55rem .75rem;border:2px solid #5b8cff;border-radius:8px;background:#132342;color:#fff;font-weight:600;min-width:160px;}
+.select-box option{background:#1c2f55;color:#fff;}
+.short-select{max-width:110px;}
+.text-area{width:100%;padding:.9rem 1rem;border:1px solid #bbb;border-radius:10px;font-size:1rem;min-height:36rem;resize:vertical;line-height:1.5;}
+.action-buttons{display:flex;gap:1rem;width:100%;flex-wrap:wrap;}
+.action-button{flex:1;min-width:180px;background:#1976d2;color:#fff;border:none;padding:.9rem 1.2rem;font-size:1.05rem;border-radius:8px;cursor:pointer;font-weight:600;letter-spacing:.5px;transition:.18s;}
+.action-button:hover{background:#125da6;}
+.action-button:disabled{background:#9e9e9e;cursor:not-allowed;}
+.read-lines-preview{background:#FAF3E0;color:#3E3E3E;border:1px solid #d8e4f5;border-radius:10px;padding:1rem;line-height:1.4;overflow:hidden;height:auto;transition:height .18s;font-size:2em;}
+.read-line{padding:.25rem .55rem;border-radius:6px;font-size:1.25em;transition:background .2s,color .2s;}
+.read-line.active{background:#ffe082;color:#e53935;font-weight:700;font-size:1.45em;}
+.error-message{color:#d32f2f;font-weight:600;}
+.footer-hint{font-size:.78rem;color:#666;margin-top:.5rem;}
+::-webkit-scrollbar{width:10px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#b5c5dd;border-radius:6px;}
+::-webkit-scrollbar-thumb:hover{background:#94aac7;}
+.rate-control-topright{position:absolute;top:24px;right:36px;z-index:10;background:#fff7e0;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:.7em 1.2em;display:flex;flex-direction:column;align-items:flex-start;gap:.7em;font-size:1.08em;}
+.rate-row{display:flex;align-items:center;gap:.7em;flex-wrap:wrap;}
+.rate-row label{min-width:128px;font-weight:600;}
+.rate-reset-btn{padding:.3em .9em;border-radius:6px;border:none;background:#ffe082;color:#3E3E3E;font-weight:600;cursor:pointer;}
+@media (max-width:900px){.rate-control-topright{right:8px;top:8px;font-size:1em;}}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:50;}
+.modal-dialog{background:#fff;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.12);width:min(480px,90vw);overflow:hidden;}
+.modal-header{padding:1rem 1.5rem;border-bottom:1px solid #eee;}
+.modal-header h3{margin:0;font-size:1.2rem;}
+.modal-content{padding:1.5rem;}
+.modal-actions{display:flex;gap:1rem;justify-content:flex-end;padding:1rem 1.5rem;}
+.modal-actions .secondary{background:#757575;}
+.stt-modal-content{display:flex;flex-direction:column;gap:1rem;}
+.stt-status{font-weight:600;color:#1976d2;}
+.stt-result{min-height:60px;background:rgba(247,250,253,.05);border:1px solid rgba(216,228,245,.1);border-radius:8px;padding:.8rem;}
+#sttModal{align-items:flex-end;padding-bottom:2rem;}
+#sttModal .modal-dialog{width:min(960px,95vw);background:rgba(255,255,255,.5);}
+#sttModal .modal-header h3,#sttModal .stt-modal-content p,#sttModal .stt-result{color:rgba(0,0,0,.4);}
+#summaryDialog{width:min(1200px,90vw);height:80vh;display:flex;flex-direction:column;}
+#summaryContent{flex-grow:1;overflow-y:auto;white-space:pre-wrap;background:#f7fafd;font-family:monospace,sans-serif;font-size:1.1em;padding:1rem;}
+</style>
+</head>
+<body>
+<div class="app-container">
+  <div class="rate-control-topright">
+    <div class="rate-row">
+      <label for="speaker1RateRange">Speaker 1 速度：</label>
+      <input type="range" id="speaker1RateRange" min="0.5" max="2" step="0.01" value="1" style="width:120px;">
+      <span id="speaker1RateValue">1</span>
+      <button id="speaker1RateResetBtn" class="rate-reset-btn" type="button">恢复 1</button>
+    </div>
+    <div class="rate-row">
+      <label for="speaker2RateRange">Speaker 2 速度：</label>
+      <input type="range" id="speaker2RateRange" min="0.5" max="2" step="0.01" value="1.25" style="width:120px;">
+      <span id="speaker2RateValue">1.25</span>
+      <button id="speaker2RateResetBtn" class="rate-reset-btn" type="button">恢复 1.25</button>
+    </div>
+  </div>
+  <header>
+    <h1>文本转语音应用</h1>
+    <div class="footer-hint">提示：生成语音并下载 时请选择“此标签页”并勾选“分享此标签页音频 / Share tab audio”。某些浏览器可能无法录制合成语音。</div>
+  </header>
+
+  <div class="control-group">
+    <label>Speaker 1 语音:</label>
+    <div class="voice-select-row">
+      <select id="speaker1Lang" class="short-select">
+        <option value="en">英语</option><option value="zh">汉语</option><option value="ja">日语</option>
+      </select>
+      <select id="speaker1Voice" class="select-box"></select>
+    </div>
+  </div>
+
+  <div class="control-group">
+    <label>Speaker 2 语音:</label>
+    <div class="voice-select-row">
+      <select id="speaker2Lang" class="short-select">
+        <option value="en">英语</option><option value="zh" selected>汉语</option><option value="ja">日语</option>
+      </select>
+      <select id="speaker2Voice" class="select-box"></select>
+    </div>
+  </div>
+
+  <div class="control-group">
+    <label for="textInput">请输入文本 (可用 Speaker 1:/Speaker 2: 前缀分配不同语音):</label>
+    <textarea id="textInput" class="text-area"></textarea>
+  </div>
+
+  <div class="action-buttons">
+    <button id="btnRead" class="action-button">朗读</button>
+    <button id="btnSpeakDownload" class="action-button">生成语音并下载 (WAV)</button>
+    <button id="btnCancel" class="action-button" disabled>取消朗读</button>
+  </div>
+
+  <div class="control-group">
+    <label>朗读预览 (自动高亮当前行):</label>
+    <div id="linesPreview" class="read-lines-preview"></div>
+  </div>
+  <div id="errorBox" class="error-message"></div>
+</div>
+
+<div class="modal-backdrop" id="sttModal">
+  <div class="modal-dialog">
+    <div class="modal-header"><h3>请说出英文句子</h3></div>
+    <div class="modal-content stt-modal-content">
+      <div id="sttStatus" class="stt-status">准备中...</div>
+      <p>识别结果：</p><div id="sttResult" class="stt-result"></div>
+    </div>
+    <div class="modal-actions">
+      <button id="sttStopBtn" class="action-button secondary" style="display:none;">退出任务</button>
+      <button id="sttStopRecBtn" class="action-button secondary" style="display:none;background-color:#ef6c00;">停止录音</button>
+      <button id="sttContinueBtn" class="action-button">完成并继续</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="summaryModal">
+  <div class="modal-dialog" id="summaryDialog">
+    <div class="modal-header"><h3>本次跟读识别汇总</h3></div>
+    <div id="summaryContent" class="modal-content"></div>
+    <div class="modal-actions"><button id="summaryCloseBtn" class="action-button">关闭</button></div>
+  </div>
+</div>
+
+<script>
+const textEl=document.getElementById('textInput');
+const speaker1LangEl=document.getElementById('speaker1Lang');
+const speaker2LangEl=document.getElementById('speaker2Lang');
+const speaker1VoiceEl=document.getElementById('speaker1Voice');
+const speaker2VoiceEl=document.getElementById('speaker2Voice');
+const btnRead=document.getElementById('btnRead');
+const btnSpeakDownload=document.getElementById('btnSpeakDownload');
+const btnCancel=document.getElementById('btnCancel');
+const linesPreview=document.getElementById('linesPreview');
+const errorBox=document.getElementById('errorBox');
+
+const speaker1RateRange=document.getElementById('speaker1RateRange');
+const speaker1RateValue=document.getElementById('speaker1RateValue');
+const speaker2RateRange=document.getElementById('speaker2RateRange');
+const speaker2RateValue=document.getElementById('speaker2RateValue');
+let speaker1Rate=1.0;
+let speaker2Rate=1.25;
+
+function formatRate(rate){return rate.toFixed(2).replace(/0+$/,'').replace(/\.$/,'');}
+function syncRateControls(){
+  speaker1RateRange.value=String(speaker1Rate);speaker1RateValue.textContent=formatRate(speaker1Rate);
+  speaker2RateRange.value=String(speaker2Rate);speaker2RateValue.textContent=formatRate(speaker2Rate);
+}
+speaker1RateRange.addEventListener('input',()=>{speaker1Rate=parseFloat(speaker1RateRange.value);speaker1RateValue.textContent=formatRate(speaker1Rate);});
+speaker2RateRange.addEventListener('input',()=>{speaker2Rate=parseFloat(speaker2RateRange.value);speaker2RateValue.textContent=formatRate(speaker2Rate);});
+document.getElementById('speaker1RateResetBtn').addEventListener('click',()=>{speaker1Rate=1.0;syncRateControls();});
+document.getElementById('speaker2RateResetBtn').addEventListener('click',()=>{speaker2Rate=1.25;syncRateControls();});
+syncRateControls();
+
+const synth=window.speechSynthesis;
+let voices=[];
+let cancelRequested=false;
+let currentLineIndex=-1;
+let recognizedSentences=[];
+let userPickedSpeaker1Lang=false;
+let userPickedSpeaker2Lang=false;
+const defaultSpeaker2VoiceName='Microsoft Xiaoxiao Online (Natural) - Chinese (Mainland)';
+let speaker2DefaultApplied=false;
+const defaultEnglishVoiceName='Microsoft Emma Online (Natural) - English (United States)';
+let speaker1EnglishDefaultApplied=false;
+let speaker2EnglishDefaultApplied=false;
+
+textEl.value=`Speaker 1: 大家好，我们来测试一下静音功能。
+{pause:1.5}
+Speaker 2: 接下来会弹出一个确认框。
+{confirm}
+Speaker 1: 你好，你刚才点击了继续。
+{确认}
+Speaker 2: 测试结束。`;
+
+function setError(msg){errorBox.textContent=msg||'';}
+function getLines(){return textEl.value.split('\n').map(l=>l.trimEnd()).filter(l=>l.trim()!=='');}
+function renderPreview(){
+  const lines=getLines();linesPreview.innerHTML='';const frag=document.createDocumentFragment();
+  lines.forEach((line,idx)=>{const div=document.createElement('div');div.className='read-line'+(idx===currentLineIndex?' active':'');div.textContent=line;frag.appendChild(div);});
+  linesPreview.appendChild(frag);
+  requestAnimationFrame(()=>{const full=linesPreview.scrollHeight;const MAX=1600;if(full<=MAX){linesPreview.style.height=full+'px';linesPreview.style.overflow='hidden';}else{linesPreview.style.height=MAX+'px';linesPreview.style.overflow='auto';}});
+}
+function updateActiveLine(idx){
+  currentLineIndex=idx;const children=Array.from(linesPreview.children);children.forEach((el,i)=>el.classList.toggle('active',i===idx));
+  if(idx>=0&&children[idx])children[idx].scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+function populateVoiceSelect(selectEl,langPrefix){
+  const prevValue=selectEl.value;const lp=langPrefix.toLowerCase();const allowedEnRegions=['en-us','en-au','en-ca','en-gb'];
+  let filtered=voices.filter(v=>{const lang=v.lang.toLowerCase();if(!lang.startsWith(lp))return false;if(lp==='en'){if(v.name==='Microsoft EmmaMultilingual Online (Natural) - English (United States)')return false;if(!allowedEnRegions.some(r=>lang.startsWith(r)))return false;}else if(lp==='zh'){if(lang.includes('hk'))return false;if(/xiaoni/i.test(v.name))return false;}return true;});
+  if(lp==='en'){const order=['en-us','en-au','en-ca','en-gb'];filtered.sort((a,b)=>{const al=a.lang.toLowerCase(),bl=b.lang.toLowerCase();const ai=order.findIndex(p=>al.startsWith(p)),bi=order.findIndex(p=>bl.startsWith(p));return ai!==bi?ai-bi:a.name.localeCompare(b.name);});}
+  if(lp==='zh'){filtered.sort((a,b)=>{const ax=/xiaoxiao/i.test(a.name)?0:1,bx=/xiaoxiao/i.test(b.name)?0:1;return ax!==bx?ax-bx:a.name.localeCompare(b.name);});}
+  selectEl.innerHTML='';
+  filtered.forEach(v=>{const opt=document.createElement('option');opt.value=v.voiceURI;opt.textContent=`${v.name} (${v.lang})`;selectEl.appendChild(opt);});
+  if(filtered.length===0){const opt=document.createElement('option');opt.value='';opt.textContent='无可用语音';selectEl.appendChild(opt);}else if(filtered.some(v=>v.voiceURI===prevValue)){selectEl.value=prevValue;}else{selectEl.value=filtered[0].voiceURI;}
+}
+function applyEnglishDefault(selectEl,which){
+  if(selectEl.options.length===0)return;if(which==='s1'&&speaker1EnglishDefaultApplied)return;if(which==='s2'&&speaker2EnglishDefaultApplied)return;
+  const opts=Array.from(selectEl.options);let target=opts.find(o=>o.text.startsWith(defaultEnglishVoiceName));if(!target)target=opts.find(o=>/Emma Online/i.test(o.text)&&/English \(United States\)/i.test(o.text));
+  if(target){selectEl.value=target.value;if(which==='s1')speaker1EnglishDefaultApplied=true;else speaker2EnglishDefaultApplied=true;}
+}
+function applySpeaker2DefaultIfNeeded(){
+  if(speaker2DefaultApplied||speaker2LangEl.value!=='zh')return;const opts=Array.from(speaker2VoiceEl.options);if(opts.length===0||(opts.length===1&&opts[0].value===''))return;
+  let target=opts.find(o=>o.text.startsWith(defaultSpeaker2VoiceName));if(!target)target=opts.find(o=>/xiaoxiao/i.test(o.text));if(target){speaker2VoiceEl.value=target.value;speaker2DefaultApplied=true;}
+}
+function loadVoices(){
+  voices=synth.getVoices();populateVoiceSelect(speaker1VoiceEl,speaker1LangEl.value);if(speaker1LangEl.value==='en')applyEnglishDefault(speaker1VoiceEl,'s1');
+  if(!userPickedSpeaker2Lang)speaker2LangEl.value='zh';populateVoiceSelect(speaker2VoiceEl,speaker2LangEl.value);if(speaker2LangEl.value==='en')applyEnglishDefault(speaker2VoiceEl,'s2');if(speaker2LangEl.value==='zh')applySpeaker2DefaultIfNeeded();
+}
+synth.onvoiceschanged=loadVoices;loadVoices();if(typeof speechSynthesis!=='undefined'&&speechSynthesis.onvoiceschanged!==undefined)speechSynthesis.getVoices();
+speaker1LangEl.addEventListener('change',()=>{userPickedSpeaker1Lang=true;populateVoiceSelect(speaker1VoiceEl,speaker1LangEl.value);if(speaker1LangEl.value==='en')applyEnglishDefault(speaker1VoiceEl,'s1');});
+speaker2LangEl.addEventListener('change',()=>{userPickedSpeaker2Lang=true;populateVoiceSelect(speaker2VoiceEl,speaker2LangEl.value);if(speaker2LangEl.value==='zh')applySpeaker2DefaultIfNeeded();if(speaker2LangEl.value==='en')applyEnglishDefault(speaker2VoiceEl,'s2');});
+textEl.addEventListener('input',renderPreview);renderPreview();
+
+function speakLine(text,voice,rate){
+  if(typeof window.AudioContext!=='undefined'){try{const ctx=new window.AudioContext();if(ctx.state==='suspended')ctx.resume();const source=ctx.createBufferSource();source.buffer=ctx.createBuffer(1,1,22050);source.connect(ctx.destination);source.start(0);setTimeout(()=>ctx.close(),200);}catch(e){}}
+  return new Promise((resolve,reject)=>{try{synth.cancel();}catch(e){}const u=new SpeechSynthesisUtterance(text);if(voice)u.voice=voice;u.rate=rate;u.onend=()=>resolve();u.onerror=e=>reject(e);synth.speak(u);});
+}
+function parseLine(raw){
+  let utterText=raw;let voice=null;let rate=speaker1Rate;
+  if(raw.startsWith('Speaker 1:')){utterText=raw.replace(/^Speaker 1:\s*/,'');voice=voices.find(v=>v.voiceURI===speaker1VoiceEl.value);rate=speaker1Rate;}
+  else if(raw.startsWith('Speaker 2:')){utterText=raw.replace(/^Speaker 2:\s*/,'');voice=voices.find(v=>v.voiceURI===speaker2VoiceEl.value);rate=speaker2Rate;}
+  else{voice=voices.find(v=>v.voiceURI===speaker1VoiceEl.value);rate=speaker1Rate;}
+  utterText=utterText.replace(/\[.*?\]/g,'');return{utterText,voice,rate};
+}
+
+const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;let recognition=null;
+function initRecognition(){if(!SpeechRecognition)return null;const rec=new SpeechRecognition();rec.lang='en-US';rec.interimResults=false;rec.continuous=false;rec.maxAlternatives=1;return rec;}
+function listenAndRecognize(options={}){
+  const{duration=0,confirmMode=false}=options;
+  return new Promise((resolve,reject)=>{
+    if(!recognition)recognition=initRecognition();if(!recognition)return reject(new Error('此浏览器不支持语音识别。'));
+    const sttModal=document.getElementById('sttModal'),sttStatus=document.getElementById('sttStatus'),sttResult=document.getElementById('sttResult'),sttContinueBtn=document.getElementById('sttContinueBtn'),sttStopBtn=document.getElementById('sttStopBtn'),sttStopRecBtn=document.getElementById('sttStopRecBtn'),modalHeader=sttModal.querySelector('.modal-header h3');
+    sttStatus.textContent='正在听你读...';sttResult.textContent='';modalHeader.textContent=confirmMode?'等待确认或语音输入':'请说出英文句子';sttStopBtn.style.display=confirmMode?'inline-block':'none';sttStopRecBtn.style.display=confirmMode?'inline-block':'none';sttModal.style.display='flex';
+    let timerId=null,currentSessionTranscript='';recognition.continuous=true;recognition.interimResults=true;
+    const cleanupAndResolve=value=>{if(timerId)clearTimeout(timerId);recognition.stop();sttModal.style.display='none';sttContinueBtn.onclick=null;sttStopBtn.onclick=null;sttStopRecBtn.onclick=null;if(value&&currentSessionTranscript)recognizedSentences.push(currentSessionTranscript);resolve(value);};
+    recognition.onresult=event=>{let interim='';currentSessionTranscript='';for(let i=0;i<event.results.length;++i){if(event.results[i].isFinal)currentSessionTranscript+=event.results[i][0].transcript;else interim+=event.results[i][0].transcript;}sttStatus.textContent='正在录入...';sttResult.textContent=currentSessionTranscript+(interim?' ('+interim+')':'');if(!confirmMode&&duration>0)timerId=setTimeout(()=>cleanupAndResolve(true),duration*1000);};
+    recognition.onerror=event=>{sttStatus.textContent='识别出错';sttResult.textContent=event.error;if(!confirmMode&&duration>0)timerId=setTimeout(()=>cleanupAndResolve(true),duration*1000);};
+    recognition.onend=()=>{if(sttStatus.textContent==='正在听你读...')sttStatus.textContent='识别结束（未收到语音）';};
+    sttContinueBtn.onclick=()=>cleanupAndResolve(true);sttStopBtn.onclick=()=>cleanupAndResolve(false);sttStopRecBtn.onclick=()=>{recognition.stop();sttStatus.textContent='已停止录入 (点击“继续”以完成)';};
+    if(!confirmMode&&duration>0)timerId=setTimeout(()=>cleanupAndResolve(true),duration*1000);
+    try{recognition.start();}catch(e){sttStatus.textContent='启动识别失败';sttResult.textContent=e.message;}
+  });
+}
+function showSummaryModal(){const summaryModal=document.getElementById('summaryModal'),summaryContent=document.getElementById('summaryContent'),summaryCloseBtn=document.getElementById('summaryCloseBtn');if(recognizedSentences.length>0){summaryContent.textContent=recognizedSentences.join('\n');summaryModal.style.display='flex';}summaryCloseBtn.onclick=()=>{summaryModal.style.display='none';};}
+
+async function readAloud(){
+  if(synth.speaking)synth.cancel();cancelRequested=false;recognizedSentences=[];setError('');const lines=getLines();if(!lines.length||voices.length===0){setError('请输入文本并确保语音已加载。');return;}
+  btnRead.disabled=true;btnSpeakDownload.disabled=true;btnCancel.disabled=true;
+  for(let i=0;i<lines.length;i++){
+    if(cancelRequested)break;updateActiveLine(i);const currentLine=lines[i].trim();const pauseMatch=currentLine.match(/\{(pause|静音):(\d+(\.\d+)?)\}/i);const confirmMatch=currentLine.match(/^\{(confirm|确认)\}$/i);
+    if(confirmMatch){const shouldContinue=await listenAndRecognize({confirmMode:true});if(!shouldContinue){cancelRequested=true;setError('已取消。');}}
+    else if(pauseMatch){const duration=parseFloat(pauseMatch[2]);btnCancel.disabled=false;try{await listenAndRecognize({duration});}catch(e){setError('语音识别失败: '+e);cancelRequested=true;}}
+    else{const{utterText,voice,rate}=parseLine(currentLine);if(!voice){setError('未找到语音。');break;}btnCancel.disabled=false;try{await speakLine(utterText,voice,rate);}catch(e){console.error(e);setError('朗读出错。');break;}}
+  }
+  synth.cancel();updateActiveLine(-1);btnRead.disabled=false;btnSpeakDownload.disabled=false;btnCancel.disabled=true;showSummaryModal();
+}
+
+function startWavRecorder(){
+  return new Promise(async(resolve,reject)=>{try{const stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});stream.getVideoTracks().forEach(t=>t.stop());const ctx=new AudioContext();const source=ctx.createMediaStreamSource(stream);const processor=ctx.createScriptProcessor(4096,1,1);const chunks=[];source.connect(processor);processor.connect(ctx.destination);processor.onaudioprocess=e=>chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    function stop(){processor.disconnect();source.disconnect();stream.getAudioTracks().forEach(t=>t.stop());let length=chunks.reduce((s,a)=>s+a.length,0);const pcmBuffer=new DataView(new ArrayBuffer(length*2));let offset=0;chunks.forEach(f32=>{for(let i=0;i<f32.length;i++,offset+=2){let s=Math.max(-1,Math.min(1,f32[i]));pcmBuffer.setInt16(offset,s<0?s*0x8000:s*0x7FFF,true);}});const sampleRate=ctx.sampleRate;const wav=new DataView(new ArrayBuffer(44+pcmBuffer.byteLength));const wStr=(o,str)=>{for(let i=0;i<str.length;i++)wav.setUint8(o+i,str.charCodeAt(i));};wStr(0,'RIFF');wav.setUint32(4,36+pcmBuffer.byteLength,true);wStr(8,'WAVE');wStr(12,'fmt ');wav.setUint32(16,16,true);wav.setUint16(20,1,true);wav.setUint16(22,1,true);wav.setUint32(24,sampleRate,true);wav.setUint32(28,sampleRate*2,true);wav.setUint16(32,2,true);wav.setUint16(34,16,true);wStr(36,'data');wav.setUint32(40,pcmBuffer.byteLength,true);new Uint8Array(wav.buffer,44).set(new Uint8Array(pcmBuffer.buffer));return new Blob([wav.buffer],{type:'audio/wav'});}resolve({stop});}catch(e){reject(e);}});
+}
+
+async function speakAndDownload(){
+  if(synth.speaking)synth.cancel();cancelRequested=false;recognizedSentences=[];setError('请在弹窗中选择“此标签页”并勾选共享音频。');const lines=getLines();if(!lines.length||voices.length===0){setError('请输入文本并确保语音已加载。');return;}
+  btnRead.disabled=true;btnSpeakDownload.disabled=true;btnCancel.disabled=true;let recorder;try{recorder=await startWavRecorder();}catch(e){setError('未能获取标签页音频或已取消共享。');btnRead.disabled=false;btnSpeakDownload.disabled=false;return;}setError('正在朗读并录音…');btnCancel.disabled=false;
+  for(let i=0;i<lines.length;i++){
+    if(cancelRequested)break;updateActiveLine(i);const currentLine=lines[i].trim();const pauseMatch=currentLine.match(/\{(pause|静音):(\d+(\.\d+)?)\}/i);const confirmMatch=currentLine.match(/^\{(confirm|确认)\}$/i);
+    if(confirmMatch){const shouldContinue=await listenAndRecognize({confirmMode:true});if(!shouldContinue){cancelRequested=true;setError('已取消。');}}
+    else if(pauseMatch){const duration=parseFloat(pauseMatch[2]);try{await listenAndRecognize({duration});}catch(e){setError('语音识别失败: '+e);cancelRequested=true;}}
+    else{const{utterText,voice,rate}=parseLine(currentLine);if(!voice){setError('未找到语音。');break;}try{await speakLine(utterText,voice,rate);}catch(e){console.error(e);setError('朗读出错。');break;}}
+  }
+  synth.cancel();updateActiveLine(-1);btnCancel.disabled=true;
+  try{const wavBlob=recorder.stop();const a=document.createElement('a');a.href=URL.createObjectURL(wavBlob);a.download='tts-audio.wav';a.click();setError('WAV 文件已下载。');}catch(e){setError('生成 WAV 失败。');}
+  btnRead.disabled=false;btnSpeakDownload.disabled=false;showSummaryModal();
+}
+
+btnCancel.addEventListener('click',()=>{cancelRequested=true;synth.cancel();setError('已取消。');});
+btnRead.addEventListener('click',readAloud);btnSpeakDownload.addEventListener('click',speakAndDownload);renderPreview();
+</script>
+</body>
+</html>
