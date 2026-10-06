@@ -13,7 +13,6 @@ import com.seki.multilangduo.model.*
 import com.seki.multilangduo.parser.TextParser
 import com.seki.multilangduo.playback.SequencePlayer
 import com.seki.multilangduo.playback.PauseGate
-import com.seki.multilangduo.playback.PausableAudioPlayer
 import com.seki.multilangduo.service.PlaybackService
 import com.seki.multilangduo.speech.SpeechRecognitionManager
 import com.seki.multilangduo.tts.TtsManager
@@ -41,7 +40,6 @@ data class AppUiState(
 class PlaybackController(private val application: Application) {
     private val viewModelScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val gate = PauseGate()
-    private val player = PausableAudioPlayer(application) { pausePlayback() }
     private val settings = SettingsRepository(application)
     private val historyRepository = PlaybackHistoryRepository(File(application.filesDir, "playback-history"))
     private val tts = TtsManager(application)
@@ -190,16 +188,27 @@ class PlaybackController(private val application: Application) {
                     mutable.update { it.copy(pendingExport = file, message = "WAV 已生成，请选择保存位置。") }
                     directory = null // Retained until the document picker finishes.
                 } else {
-                    directory = File(application.cacheDir, "playback-${UUID.randomUUID()}").apply { mkdirs() }
-                    val playbackDirectory = directory
                     val completed = SequencePlayer().play(lines,
                         highlight = { index -> mutable.update { it.copy(currentLineIndex = index) } },
                         speak = { action ->
                             mutable.update { it.copy(phase = TaskPhase.Speaking) }
                             if (action.text.isNotBlank()) {
                                 val speaker = config(action.speaker)
-                                val file = exporter.generate(listOf(ScriptLine(action.text, action)), { speaker }, playbackDirectory) {}
-                                player.playAndAwait(file, gate)
+                                while (currentCoroutineContext().isActive) {
+                                    gate.awaitResumed()
+                                    try {
+                                        // Normal playback goes straight through Android TTS.
+                                        // This avoids per-line WAV synthesis + MediaPlayer preparation,
+                                        // so Speaker 1 -> Speaker 2 transitions are much faster.
+                                        tts.speakAndAwait(action.text, speaker)
+                                        break
+                                    } catch (e: CancellationException) {
+                                        // Android TextToSpeech has no native pause/resume. When the user
+                                        // pauses, stop the utterance and restart the current line after resume.
+                                        if (!gate.isPaused || !currentCoroutineContext().isActive) throw e
+                                        gate.awaitResumed()
+                                    }
+                                }
                             }
                         },
                         listen = { seconds ->
@@ -226,7 +235,7 @@ class PlaybackController(private val application: Application) {
             } finally {
                 withContext(NonCancellable + Dispatchers.IO) { directory?.deleteRecursively() }
                 if (run == token) {
-                    player.stop(); tts.stop(); recognition.cancel(); gate.resume()
+                    tts.stop(); recognition.cancel(); gate.resume()
                     mutable.update { it.copy(currentLineIndex = -1, recognition = null) }
                     task = null
                 }
@@ -235,18 +244,18 @@ class PlaybackController(private val application: Application) {
     }
     fun cancel() {
         if (!state.value.busy) return
-        ++token; pendingRequest = null; task?.cancel(); task = null; player.stop(); tts.stop(); recognition.cancel(); gate.resume()
+        ++token; pendingRequest = null; task?.cancel(); task = null; tts.stop(); recognition.cancel(); gate.resume()
         mutable.update { it.copy(phase = TaskPhase.Cancelled, paused = false, currentLineIndex = -1, recognition = null, message = "已取消", summary = recognizedSentences.toList()) }
     }
     fun pausePlayback() {
         if (!state.value.canPause || gate.isPaused) return
-        gate.pause(); player.pause(); recognition.pause()
+        gate.pause(); tts.stop(); recognition.pause()
         mutable.update { it.copy(paused = true) }
     }
     fun resumePlayback() {
         if (!state.value.canPause || !gate.isPaused) return
         try {
-            player.resume(); gate.resume(); recognition.resume()
+            gate.resume(); recognition.resume()
             mutable.update { it.copy(paused = false) }
         } catch (e: Exception) { message("继续播放失败：${e.message}") }
     }
@@ -294,7 +303,7 @@ class PlaybackController(private val application: Application) {
         }
     }
     fun close() {
-        task?.cancel(); player.stop(); tts.shutdown(); recognition.cancel(); viewModelScope.cancel()
+        task?.cancel(); tts.shutdown(); recognition.cancel(); viewModelScope.cancel()
         state.value.pendingExport?.parentFile?.deleteRecursively()
     }
 }
